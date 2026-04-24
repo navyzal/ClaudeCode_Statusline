@@ -137,7 +137,6 @@ case "$EVENT" in
     DONE_SEC_PHASE=60
     DONE_MAX_TTL=3600
     (
-      printf '%d' "$$" > "$loop_pid_file" 2>/dev/null
       end_ts=$NOW
       sec_deadline=$(( end_ts + DONE_SEC_PHASE ))
       final_deadline=$(( end_ts + DONE_MAX_TTL ))
@@ -157,7 +156,12 @@ case "$EVENT" in
       done
       rm -f "$loop_pid_file" 2>/dev/null
     ) </dev/null >/dev/null 2>&1 &
-    disown $! 2>/dev/null
+    # Use $! (bg subshell PID) — NOT $$ from inside the subshell, which would
+    # be the parent shell's PID. Write the PID synchronously from the parent
+    # so the next stop-hook invocation can kill us reliably.
+    loop_pid=$!
+    printf '%d' "$loop_pid" > "$loop_pid_file" 2>/dev/null
+    disown "$loop_pid" 2>/dev/null
     ;;
 
   *)

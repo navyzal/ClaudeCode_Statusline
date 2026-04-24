@@ -1,6 +1,6 @@
 # Vic_Statusline
 
-victory.han 의 커스텀 Claude Code statusline 스킬. 한 set 의 쉘 스크립트 + 훅 +
+내 커스텀 Claude Code statusline 스킬. 한 set 의 쉘 스크립트 + 훅 +
 설정을 다른 PC 로 한 번에 이식하기 위한 도구.
 
 ## 새 PC 에서 복원하는 법

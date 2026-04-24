@@ -1,6 +1,6 @@
 ---
 name: Vic_Statusline
-description: Install victory.han's custom Claude Code statusline (activity banner + git + context/model/effort + Claude/Codex rate-limit bars + Codex API-key cost) onto a new machine. TRIGGER on Korean phrases "빅스테이터스라인", "내 statusline 세팅 복원", "statusline 스킬 설치", "Vic_Statusline 설치" or English "install Vic_Statusline", "restore my statusline", "set up custom statusline". Also handles syncing the live scripts back into this skill as a snapshot before pushing to git.
+description: Install my custom Claude Code statusline (activity banner + git + context/model/effort + Claude/Codex rate-limit bars + Codex API-key cost) onto a new machine. TRIGGER on Korean phrases "빅스테이터스라인", "내 statusline 세팅 복원", "statusline 스킬 설치", "Vic_Statusline 설치" or English "install Vic_Statusline", "restore my statusline", "set up custom statusline". Also handles syncing the live scripts back into this skill as a snapshot before pushing to git.
 ---
 
 # Vic_Statusline
