@@ -3,6 +3,46 @@
 내 커스텀 Claude Code statusline 스킬. 한 set 의 쉘 스크립트 + 훅 +
 설정을 다른 PC 로 한 번에 이식하기 위한 도구.
 
+## 어떤 모양으로 나오는지
+
+정상 동작 시 최대 8 줄까지 출력된다 (실제 출력은 ANSI 컬러 처리 — 아래는
+컬러를 지운 샘플).
+
+```
+● Working · Bash · 0:12
+navyzal | main (wt: feature-x)
+~/Workspace/my-project
+[Context Window] ████░░░░░░  42% | Opus 4.7 | high
+*Claude Code ~5h ███░░░░░░░  32% | 3:41 | (4/24 23:00)
+*Claude Code ~7d ██░░░░░░░░  21% | 5:14:22 | (4/30 18:00)
+Codex Review ~5h █░░░░░░░░░  14% | 4:02 | (4/24 23:30) [2m ago]
+Codex Review ~7d ██░░░░░░░░  18% | 6:22:11 | (5/1 12:00) [2m ago]
+```
+
+### 활동 배너 (첫 줄) 상태 변화
+
+- `● Working · <tool> · 0:12` — 턴이 진행 중. 도구 이름과 턴 경과 시간을 같이 표시.
+- `✓ Done · 3s ago` — 턴 종료 직후 (60s 동안 유지).
+- `○ Idle` — 유휴.
+
+### Codex 줄 변형
+
+- **구독 모드**: 위 샘플처럼 `~5h` / `~7d` 두 줄.
+- **API-key 모드 (Azure/OpenAI)**: 한 줄로 합쳐져 오늘 누적 비용만 표시.
+  ```
+  Codex Azure 💰 $0.1234 (today) [5m ago]
+  ```
+
+### 컬러 규칙 (실제 출력)
+
+- `● Working` 주황, `✓ Done` 녹색, `○ Idle` 회색.
+- `[Context Window]` 바는 임계값별 녹→황→적 (곧 한계인지 한눈에).
+- `*Claude Code` 바는 Claude 브랜드 오렌지, `Codex` 바는 Codex 블루 —
+  공급자 식별을 위해 퍼센트와 무관하게 고정.
+- `(wt: ...)` 워크트리 태그는 linked worktree 에서만 등장 (메인 체크아웃 혼동 방지).
+
+각 줄이 어떤 stdin 필드·스크립트에서 오는지는 `reference.md` 참조.
+
 ## 새 PC 에서 복원하는 법
 
 ```bash
