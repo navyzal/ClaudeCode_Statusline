@@ -352,29 +352,53 @@ if [ -x "$cx_helper" ]; then
   fi
 fi
 
-# ---- Line 0: Activity (Working / tool / Done / Idle) ----
-# Reads /tmp/claude-activity.<uid>.<session_id>.json written by
-# ~/.claude/scripts/claude-activity.sh via the UserPromptSubmit / PreToolUse /
-# PostToolUse / Stop hooks. The file is keyed by session_id (from the same
-# JSON blob passed into this statusline) so multiple concurrent Claude Code
-# sessions don't stomp on each other's state.
+# ---- Line 0: Activity (Working / tool / Wait / Done / Idle) ----
+# Reads /tmp/claude-activity.<uid>.<session_id>.json (state) and a sibling
+# .pending.json (open async work) written by ~/.claude/scripts/claude-activity.sh
+# via the UserPromptSubmit / PreToolUse / PostToolUse / Stop / SubagentStop
+# hooks. Files are keyed by session_id so concurrent Claude Code sessions
+# don't stomp on each other's state.
 #
-# Elapsed is always computed from `turn_started_at` (set on user-prompt,
-# preserved through tool transitions) so the counter ticks monotonically
-# without jumping when a tool begins or finishes.
+# Elapsed for working/tool is computed from `turn_started_at` (set on
+# user-prompt, preserved through tool transitions). Done shows both relative
+# (Xs ago) and absolute (HH:MM:SS) time — Claude Code's statusline doesn't
+# refresh on a timer between events, so the absolute timestamp is the
+# reliable anchor when renders are sparse.
 #
 # DONE_TTL: how long (s) a "Done" banner remains before decaying to "Idle".
 DONE_TTL=60
 session_id=$(jqv '.session_id')
 [ -z "$session_id" ] && session_id="_default"
 activity_file="/tmp/claude-activity.$(id -u).${session_id}.json"
+pending_file="/tmp/claude-activity.$(id -u).${session_id}.pending.json"
 line_activity=""
+
+# Compute live pending total from the pending file, pruning expired wakeups
+# and >1h-old bg_bash entries on the read side. This lets the statusline
+# auto-flip waiting→done as wakeups naturally expire, even without a hook
+# firing in the meantime. Read-only: never rewrite the pending file from
+# here (avoids races with hook writes).
+pending_live=0
+if [ -r "$pending_file" ]; then
+  pending_live=$(jq -r --argjson now "$now_s" '
+    ((.subagents // 0))
+    + (((.bg_bash // []) | map(select(($now - (.at // 0)) < 3600))) | length)
+    + (((.wakeups // []) | map(select((.wake_at // 0) > $now))) | length)
+  ' "$pending_file" 2>/dev/null)
+  [ -z "$pending_live" ] && pending_live=0
+fi
 
 if [ -r "$activity_file" ]; then
   a_state=$(jq  -r '.state           // empty' "$activity_file" 2>/dev/null)
   a_tool=$(jq   -r '.tool            // empty' "$activity_file" 2>/dev/null)
   a_tstart=$(jq -r '.turn_started_at // empty' "$activity_file" 2>/dev/null)
   a_ended=$(jq  -r '.ended_at        // empty' "$activity_file" 2>/dev/null)
+
+  # If the state file says "waiting" but live pending hits zero (e.g. all
+  # wakeups have naturally expired), render as Done at the original ended_at.
+  if [ "$a_state" = "waiting" ] && [ "$pending_live" -le 0 ]; then
+    a_state="done"
+  fi
 
   case "$a_state" in
     tool|working)
@@ -384,10 +408,19 @@ if [ -r "$activity_file" ]; then
         && line_activity+="${SEP}${C_CYAN}${a_tool}${C_RESET}"
       [ -n "$elapsed" ]   && line_activity+="${SEP}${C_WHITE}${elapsed}${C_RESET}"
       ;;
+    waiting)
+      elapsed=$(fmt_elapsed $(( now_s - ${a_ended:-$now_s} )))
+      line_activity="${C_YELLOW}⏳${C_RESET} ${C_WHITE}Wait${C_RESET}"
+      [ "$pending_live" -gt 0 ] \
+        && line_activity+="${SEP}${C_GRAY}(${pending_live} pending)${C_RESET}"
+      [ -n "$elapsed" ] && line_activity+="${SEP}${C_GRAY}${elapsed}${C_RESET}"
+      ;;
     done)
       if [ -n "$a_ended" ] && [ "$(( now_s - a_ended ))" -lt "$DONE_TTL" ]; then
-        ago=$(( now_s - a_ended ))
-        line_activity="${C_GREEN}✓${C_RESET} ${C_WHITE}Done${C_RESET}${SEP}${C_GRAY}${ago}s ago${C_RESET}"
+        ago=$(fmt_elapsed $(( now_s - a_ended )))
+        abs=$(date -r "$a_ended" "+%H:%M:%S" 2>/dev/null)
+        line_activity="${C_GREEN}✓${C_RESET} ${C_WHITE}Done${C_RESET}${SEP}${C_GRAY}${ago} ago${C_RESET}"
+        [ -n "$abs" ] && line_activity+="${SEP}${C_GRAY}${abs}${C_RESET}"
       else
         line_activity="${C_GRAY}○ Idle${C_RESET}"
       fi
