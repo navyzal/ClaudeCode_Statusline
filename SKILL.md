@@ -10,7 +10,7 @@ Claude Code 의 `statusLine` + 활동 배너 훅 세트를 다른 PC 로 이식�
 한 세트로 묶여야 동작하는 자산:
 
 - `~/.claude/statusline-command.sh` — 메인 렌더러
-- `~/.claude/scripts/claude-activity.sh` — UserPromptSubmit/PreToolUse/PostToolUse/Stop 훅 디스패처
+- `~/.claude/scripts/claude-activity.sh` — UserPromptSubmit/PreToolUse/PostToolUse/Stop/SubagentStop 훅 디스패처
 - `~/.claude/scripts/codex-usage.sh` — Codex 사용량 SQLite 헬퍼
 - `~/.claude/settings.json` 의 `statusLine` 블록 + 4 개 훅
 
@@ -73,13 +73,14 @@ jq --arg home "$HOME" --arg act "$ACTIVITY" '
     "type": "command",
     "command": ("bash " + $home + "/.claude/statusline-command.sh")
   }
-  # --- hooks: 4 종에 claude-activity.sh 훅을 append (중복 방지) ---
+  # --- hooks: 5 종에 claude-activity.sh 훅을 append (중복 방지) ---
   | .hooks //= {}
   | reduce (
       ["UserPromptSubmit","user-prompt"],
       ["PreToolUse","tool-pre"],
       ["PostToolUse","tool-post"],
-      ["Stop","stop"]
+      ["Stop","stop"],
+      ["SubagentStop","subagent-stop"]
     ) as $pair (.;
       .hooks[$pair[0]] //= []
       | if any(.hooks[$pair[0]][]?.hooks[]?.command // ""; test("claude-activity\\.sh"))
@@ -97,7 +98,7 @@ jq --arg home "$HOME" --arg act "$ACTIVITY" '
 
 #### 설치 검증
 - `jq '.statusLine' "$SETTINGS"` 출력 확인.
-- `jq '.hooks | keys' "$SETTINGS"` 에 4 종이 들어있는지.
+- `jq '.hooks | keys' "$SETTINGS"` 에 5 종(UserPromptSubmit/PreToolUse/PostToolUse/Stop/SubagentStop)이 들어있는지.
 - `bash ~/.claude/statusline-command.sh <<< '{"session_id":"t","context_window":{"used_percentage":12},"model":{"display_name":"x"},"output_style":{"name":"high"}}'`
   가 3~8줄 출력하는지.
 
