@@ -356,7 +356,7 @@ if [ -x "$cx_helper" ]; then
           [ -z "$cxsp_int" ] && cxsp_int=0
           bar=$(make_bar "$cxsp_int" "$C_CODEX")
           pct=$(fmt_pct "$cxsp_int")
-          line7="${C_CODEX}Codex Spark ~5h${C_RESET} ${bar} ${pct}"
+          line7="${C_CODEX}Codex Spark ~~5h${C_RESET} ${bar} ${pct}"
           if [ -n "$cxsp_reset" ] && [ "$cxsp_reset" -gt "$now_s" ]; then
             remain=$(fmt_remain_5h $(( cxsp_reset - now_s )))
             [ -n "$remain" ] && line7+="${SEP}${C_WHITE}${remain}${C_RESET}"
