@@ -348,6 +348,10 @@ if [ -r "$LOGS_DB" ]; then
           spark_five_hour: (
             ($sp_buckets | map(select(.window_minutes == 300)) | .[0]) //
             ($sp_buckets[0] // null)
+          ),
+          spark_seven_day: (
+            ($sp_buckets | map(select(.window_minutes == 10080)) | .[0]) //
+            ($sp_buckets[1] // null)
           )
         }
       | {
@@ -368,6 +372,12 @@ if [ -r "$LOGS_DB" ]; then
             if .spark_five_hour == null then null
             else {used_percentage: (.spark_five_hour.used_percent // 0),
                   resets_at:       (.spark_five_hour.reset_at // 0)}
+            end
+          ),
+          spark_seven_day: (
+            if .spark_seven_day == null then null
+            else {used_percentage: (.spark_seven_day.used_percent // 0),
+                  resets_at:       (.spark_seven_day.reset_at // 0)}
             end
           )
         }
