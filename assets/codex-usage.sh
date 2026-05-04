@@ -329,6 +329,9 @@ if [ -r "$LOGS_DB" ]; then
       | ($r.rate_limits // {}) as $rl
       | [($rl.primary // empty), ($rl.secondary // empty)]
       | map(select(. != null)) as $buckets
+      | (($r.additional_rate_limits // {})["GPT-5.3-Codex-Spark"] // {}) as $sp
+      | [($sp.primary // empty), ($sp.secondary // empty)]
+      | map(select(. != null)) as $sp_buckets
       | {
           available: (($buckets | length) > 0),
           mode: "subscription",
@@ -341,6 +344,10 @@ if [ -r "$LOGS_DB" ]; then
           seven_day: (
             ($buckets | map(select(.window_minutes == 10080)) | .[0]) //
             ($buckets[1] // null)
+          ),
+          spark_five_hour: (
+            ($sp_buckets | map(select(.window_minutes == 300)) | .[0]) //
+            ($sp_buckets[0] // null)
           )
         }
       | {
@@ -355,6 +362,12 @@ if [ -r "$LOGS_DB" ]; then
             if .seven_day == null then null
             else {used_percentage: (.seven_day.used_percent // 0),
                   resets_at:       (.seven_day.reset_at // 0)}
+            end
+          ),
+          spark_five_hour: (
+            if .spark_five_hour == null then null
+            else {used_percentage: (.spark_five_hour.used_percent // 0),
+                  resets_at:       (.spark_five_hour.reset_at // 0)}
             end
           )
         }
