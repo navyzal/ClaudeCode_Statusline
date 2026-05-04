@@ -245,6 +245,8 @@ fi
 # API-key mode      → single row: "Codex {provider} 💰 ${cost}" (last 1h).
 line5=""
 line6=""
+line7=""
+line8=""
 cx_helper="${HOME}/.claude/scripts/codex-usage.sh"
 
 fmt_sample_age() {
@@ -347,6 +349,42 @@ if [ -x "$cx_helper" ]; then
           [ -n "$reset_str" ] && line6+="${SEP}${C_GRAY}(${reset_str})${C_RESET}"
           [ -n "$age_suffix" ] && line6+=" ${age_suffix}"
         fi
+
+        # --- CX Spark ~5h (additional_rate_limits["GPT-5.3-Codex-Spark"]) ---
+        cxsp_pct=$(printf '%s' "$cx_json"   | jq -r '.spark_five_hour.used_percentage // empty' 2>/dev/null)
+        cxsp_reset=$(printf '%s' "$cx_json" | jq -r '.spark_five_hour.resets_at       // empty' 2>/dev/null)
+        if [ -n "$cxsp_pct" ]; then
+          cxsp_int=${cxsp_pct%.*}
+          [ -z "$cxsp_int" ] && cxsp_int=0
+          bar=$(make_bar "$cxsp_int" "$C_CODEX")
+          pct=$(fmt_pct "$cxsp_int")
+          line7="${C_CODEX}Codex Spark ~~5h${C_RESET} ${bar} ${pct}"
+          if [ -n "$cxsp_reset" ] && [ "$cxsp_reset" -gt "$now_s" ]; then
+            remain=$(fmt_remain_5h $(( cxsp_reset - now_s )))
+            [ -n "$remain" ] && line7+="${SEP}${C_WHITE}${remain}${C_RESET}"
+          fi
+          reset_str=$(fmt_reset_time "$cxsp_reset" "$now_s")
+          [ -n "$reset_str" ] && line7+="${SEP}${C_GRAY}(${reset_str})${C_RESET}"
+          [ -n "$age_suffix" ] && line7+=" ${age_suffix}"
+        fi
+
+        # --- CX Spark ~7d (additional_rate_limits["GPT-5.3-Codex-Spark"]) ---
+        cxsp7_pct=$(printf '%s' "$cx_json"   | jq -r '.spark_seven_day.used_percentage // empty' 2>/dev/null)
+        cxsp7_reset=$(printf '%s' "$cx_json" | jq -r '.spark_seven_day.resets_at       // empty' 2>/dev/null)
+        if [ -n "$cxsp7_pct" ]; then
+          cxsp7_int=${cxsp7_pct%.*}
+          [ -z "$cxsp7_int" ] && cxsp7_int=0
+          bar=$(make_bar "$cxsp7_int" "$C_CODEX")
+          pct=$(fmt_pct "$cxsp7_int")
+          line8="${C_CODEX}Codex Spark ~~7d${C_RESET} ${bar} ${pct}"
+          if [ -n "$cxsp7_reset" ] && [ "$cxsp7_reset" -gt "$now_s" ]; then
+            remain=$(fmt_remain_7d $(( cxsp7_reset - now_s )))
+            [ -n "$remain" ] && line8+="${SEP}${C_WHITE}${remain}${C_RESET}"
+          fi
+          reset_str=$(fmt_reset_time "$cxsp7_reset" "$now_s")
+          [ -n "$reset_str" ] && line8+="${SEP}${C_GRAY}(${reset_str})${C_RESET}"
+          [ -n "$age_suffix" ] && line8+=" ${age_suffix}"
+        fi
       fi
     fi
   fi
@@ -443,6 +481,8 @@ lines=()
 [ -n "$line4" ]    && lines+=("$line4")     # CC ~7d
 [ -n "$line5" ]    && lines+=("$line5")     # CX ~5h
 [ -n "$line6" ]    && lines+=("$line6")     # CX ~7d
+[ -n "$line7" ]    && lines+=("$line7")     # CX Spark ~5h
+[ -n "$line8" ]    && lines+=("$line8")     # CX Spark ~7d
 
 total=${#lines[@]}
 i=0
