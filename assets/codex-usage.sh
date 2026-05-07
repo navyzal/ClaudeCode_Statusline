@@ -290,8 +290,131 @@ PY
 fi
 
 # =========================================================================
-# Subscription mode: pull latest codex.rate_limits event from logs_2.sqlite
+# Subscription mode.
+# Preferred: ask a live `codex app-server` (via the codex-companion broker)
+# for fresh rate limits via `account/rateLimits/read` — this is what the TUI's
+# /usage screen does. The legacy log-scan source only updates when a new turn
+# starts, so it goes hours stale during long Claude Code sessions.
+# Fallback: scan logs_2.sqlite for the most recent codex.rate_limits event.
 # =========================================================================
+if command -v python3 >/dev/null 2>&1; then
+  rpc_out=$(PROVIDER="$provider" NOW_EPOCH="$now_epoch" python3 - <<'PY'
+import glob, json, os, socket, sys, time
+
+now      = int(os.environ["NOW_EPOCH"])
+provider = os.environ["PROVIDER"]
+tmpdir   = (os.environ.get("TMPDIR") or "/tmp").rstrip("/")
+
+# Codex-companion broker.sock files. The cwd of the user-facing Codex session
+# isn't knowable here, so we just probe the most-recently-touched ones — newer
+# brokers run newer codex versions that support account/rateLimits/read.
+candidates = sorted(
+    glob.glob(f"{tmpdir}/cxc-*/broker.sock") +
+    glob.glob("/tmp/cxc-*/broker.sock"),
+    key=lambda p: os.path.getmtime(os.path.dirname(p)),
+    reverse=True,
+)
+
+def is_alive(pid_path):
+    try:
+        pid = int(open(pid_path).read().strip())
+        os.kill(pid, 0)
+        return True
+    except Exception:
+        return False
+
+# Returns (result, error_code).
+#   result: dict on success, None otherwise.
+#   error_code: "busy" / "unsupported" / "timeout" / "error" — used to skip
+#               legacy-version brokers on subsequent attempts in the same run.
+def try_one(sock_path, connect_timeout=0.3, read_timeout=1.5):
+    s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    s.settimeout(connect_timeout)
+    try:
+        s.connect(sock_path)
+        s.settimeout(read_timeout)
+        f = s.makefile("rwb", buffering=0)
+        f.write(b'{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}\n')
+        f.readline()
+        f.write(b'{"jsonrpc":"2.0","id":2,"method":"account/rateLimits/read","params":null}\n')
+        line = f.readline()
+        if not line:
+            return None, "error"
+        obj = json.loads(line)
+        if obj.get("error"):
+            code = obj["error"].get("code")
+            if code == -32001:   return None, "busy"
+            if code == -32601:   return None, "unsupported"
+            return None, "error"
+        return obj.get("result"), None
+    except socket.timeout:
+        return None, "timeout"
+    except Exception:
+        return None, "error"
+    finally:
+        try: s.close()
+        except Exception: pass
+
+result = None
+deadline = time.time() + 4.0
+attempts = 0
+unsupported_dirs = set()  # within-run skip list for legacy-version brokers
+for sock_path in candidates:
+    if time.time() > deadline or attempts >= 8:
+        break
+    broker_dir = os.path.dirname(sock_path)
+    if broker_dir in unsupported_dirs:
+        continue
+    pid_path = os.path.join(broker_dir, "broker.pid")
+    if not (os.path.exists(pid_path) and is_alive(pid_path)):
+        continue
+    attempts += 1
+    res, err = try_one(sock_path)
+    if res is not None:
+        result = res
+        break
+    if err == "unsupported":
+        unsupported_dirs.add(broker_dir)
+
+if not result:
+    sys.exit(1)
+
+def window(w):
+    if not w:
+        return None
+    return {
+        "used_percentage": int(w.get("usedPercent") or 0),
+        "resets_at":       int(w.get("resetsAt") or 0),
+    }
+
+main_rl = result.get("rateLimits") or {}
+spark_rl = None
+for v in (result.get("rateLimitsByLimitId") or {}).values():
+    if (v or {}).get("limitName") == "GPT-5.3-Codex-Spark":
+        spark_rl = v
+        break
+
+out = {
+    "available":       True,
+    "mode":            "subscription",
+    "provider":        provider,
+    "sampled_at":      now,
+    "source":          "rpc",
+    "five_hour":       window(main_rl.get("primary")),
+    "seven_day":       window(main_rl.get("secondary")),
+    "spark_five_hour": window(spark_rl.get("primary"))   if spark_rl else None,
+    "spark_seven_day": window(spark_rl.get("secondary")) if spark_rl else None,
+}
+sys.stdout.write(json.dumps(out, separators=(",", ":")))
+PY
+)
+  if [ -n "$rpc_out" ]; then
+    printf '%s' "$rpc_out" > "$CACHE" 2>/dev/null
+    printf '%s' "$rpc_out"
+    exit 0
+  fi
+fi
+
 extract_json() {
   printf '%s' "$1" | awk '
     BEGIN { depth=0; in_str=0; esc=0 }
