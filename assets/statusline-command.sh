@@ -247,7 +247,9 @@ line5=""
 line6=""
 line7=""
 line8=""
-cx_helper="${HOME}/.claude/scripts/codex-usage.sh"
+_self_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd)"
+cx_helper="${_self_dir}/scripts/codex-usage.sh"
+[ -x "$cx_helper" ] || cx_helper="${HOME}/.claude/scripts/codex-usage.sh"
 
 fmt_sample_age() {
   # Human-readable age of sample (Xm / Xh / Xd), grey.
