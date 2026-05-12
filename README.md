@@ -22,7 +22,10 @@ Codex Review ~7d ██░░░░░░░░  18% | 6:22:11 | (5/1 12:00) [2m
 ### 활동 배너 (첫 줄) 상태 변화
 
 - `● Working · <tool> · 0:12` — 턴이 진행 중. 도구 이름과 턴 경과 시간을 같이 표시.
-- `✓ Done · 3s ago` — 턴 종료 직후 (60s 동안 유지).
+- `⏳ Wait · 0:34` — 모델 응답은 끝났지만 `run_in_background` Bash / Agent 등
+  비동기 작업이 아직 열려 있는 상태. 모든 비동기가 닫히는 시점에 `Done` 으로 전환.
+- `✓ Done · 3s ago` — 턴 종료 직후 (60s 동안 유지). 타임스탬프는 마지막 비동기
+  작업이 실제로 끝난 시점 기준이라 `Wait` 가 길었어도 정확함.
 - `○ Idle` — 유휴.
 
 ### Codex 줄 변형
@@ -57,11 +60,21 @@ git clone <git-remote-url> Vic_Statusline
 ```
 
 설치는 `SKILL.md` 의 "Install" 절차대로 진행되며:
-- `~/.claude/{statusline-command.sh, scripts/claude-activity.sh, scripts/codex-usage.sh}` 복사
-- `~/.claude/settings.json` 의 `statusLine` + 4 개 활동 훅을 머지 (기존 키 보존)
+- `~/.claude/{statusline-command.sh, scripts/claude-activity.sh, scripts/codex-usage.sh, scripts/context-threshold-check.sh}` 복사
+- `~/.claude/settings.json` 의 `statusLine` + 5 개 훅 (UserPromptSubmit / PreToolUse /
+  PostToolUse / Stop ×2 [activity + threshold] / SubagentStop) 을 머지 (기존 키 보존)
 - 기존 파일은 모두 `.bak.<ts>` 로 백업
 
 설치 후 Claude Code 재시작.
+
+### 자동 핸드오프 임계 (80%)
+
+`context-threshold-check.sh` 는 Stop hook 으로 등록되어 context window 사용량이
+임계값 (기본 80%) 을 넘으면 `hookSpecificOutput.additionalContext` 로 모델에
+"HANDOFF-r{N+1}.md 작성 후 stop" reminder 를 inject 한다. 프롬프트 캐시 cliff
+직전에 자율 라운드 루프를 자연스럽게 멈추기 위함.
+
+임계값 변경: `export CLAUDE_CONTEXT_HANDOFF_THRESHOLD=85`.
 
 ## 원본 PC 에서 스냅샷 갱신
 
@@ -71,7 +84,7 @@ statusline 스크립트를 수정한 뒤:
 "Vic_Statusline 동기화"   ← 자연어로 호출
 ```
 
-→ 라이브 `~/.claude/...` 의 3 개 스크립트가 이 레포의 `assets/` 로 복사됨.
+→ 라이브 `~/.claude/...` 의 4 개 스크립트가 이 레포의 `assets/` 로 복사됨.
 → 그 다음 `git add -A && git commit && git push`.
 
 ## 의존성
@@ -89,7 +102,8 @@ Vic_Statusline/
 ├── reference.md      # 각 statusline 라인의 의미와 데이터 출처
 ├── README.md         # 이 파일
 └── assets/
-    ├── statusline-command.sh
-    ├── claude-activity.sh
-    └── codex-usage.sh
+    ├── statusline-command.sh        # 메인 렌더러 (+ ctx_pct cache 작성)
+    ├── claude-activity.sh           # 활동 배너 상태 머신 (Working/Wait/Done/Idle)
+    ├── codex-usage.sh               # Codex 사용량 (live RPC + sqlite 폴백)
+    └── context-threshold-check.sh   # Stop hook: 80% 임계 자동 핸드오프 reminder
 ```
