@@ -29,6 +29,20 @@ API-key 모드에서는 6/7 이 한 줄(`Codex {provider} 💰 $cost`) 로 합�
 
 `DONE_TTL=60` 초가 지나면 `done` → `idle` 회색으로 디케이.
 
+## 자동 핸드오프 임계 hook
+
+`~/.claude/scripts/context-threshold-check.sh` 는 Stop hook 의 두 번째 entry 로 등록되어 자율 라운드 자동 핸드오프 트리거를 담당:
+
+- **Cache 작성** — `statusline-command.sh` 가 매 렌더링 시점마다 stdin JSON 의 `.context_window.used_percentage` 를 `/tmp/claude-ctx-pct.<uid>.<session_id>` 에 cache (한 줄, decimal). statusline 은 매 입력/출력/refresh 시 호출되므로 거의 실시간 반영.
+- **Cache 읽기** — Stop hook 시 동일 path 의 cache read. 없거나 비어있으면 silent exit 0 (no-op).
+- **임계 체크** — 환경변수 `CLAUDE_CONTEXT_HANDOFF_THRESHOLD` (기본 `80`) 와 정수 비교. 미만이면 silent exit 0.
+- **임계 도달 시** — `hookSpecificOutput.additionalContext` JSON 출력. Claude Code 가 다음 모델 turn 의 system message 에 inject. 메시지 내용 = "HANDOFF-r{N+1}.md 작성 후 stop" (자율 라운드 룰 정합).
+- **fail-safe** — 모든 분기가 `exit 0`. cache 부재 / jq 부재 / 정수 변환 실패 / 임계 미만 모두 정상 종료. Stop hook 자체를 절대 block 하지 않는다.
+
+**왜 Stop hook 인가**: 모델 응답 종료 시점 = 라운드 종료 시점 의 가장 명확한 시그널. PostToolUse 도 가능하나 매 도구마다 trigger = 노이즈 ↑. UserPromptSubmit 은 사용자 프롬프트 제출 시점 = 자율 모드에서 거의 안 발생.
+
+**왜 statusline 만 ctx_pct 받는가**: Claude Code 의 stdin JSON 은 hook 종류별로 schema 다름. statusline 의 stdin = full session state (`.context_window` 포함). Stop hook 의 stdin = `.session_id` + `.tool_name` 등 최소 정보. Cache 파일이 두 schema 를 잇는 bridge.
+
 ## Codex 헬퍼
 
 `codex-usage.sh` 는 `~/.codex/auth.json` 의 `auth_mode` 로 모드를 판정:

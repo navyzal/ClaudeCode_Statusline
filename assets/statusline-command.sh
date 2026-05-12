@@ -199,6 +199,17 @@ if [ -n "$ctx_pct" ]; then
   [ -n "$effort" ] && line2+="${SEP}${C_MAGENTA}${effort}${C_RESET}"
 fi
 
+# ---- Cache ctx_pct for Stop hook auto-handoff threshold ----
+# context-threshold-check.sh reads this file to detect when the context
+# window crosses the configured threshold (default 80%) and inject an
+# additionalContext reminder so the model writes a HANDOFF and stops the
+# autonomous loop before falling off the cache cliff.
+sid=$(jqv '.session_id')
+uid=$(id -u 2>/dev/null || printf 'unknown')
+if [ -n "$sid" ] && [ -n "$ctx_pct" ]; then
+  printf '%s' "$ctx_pct" > "/tmp/claude-ctx-pct.${uid}.${sid}" 2>/dev/null
+fi
+
 # ---- Line 3: ~5h ----
 h5_pct=$(jqv '.rate_limits.five_hour.used_percentage')
 h5_reset=$(jqv '.rate_limits.five_hour.resets_at')
