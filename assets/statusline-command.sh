@@ -186,7 +186,7 @@ now_s=$(date "+%s")
 ctx_pct=$(jqv '.context_window.used_percentage')
 model=$(jqv '.model.display_name')
 model=${model// context/}
-effort=$(jqv '.output_style.name')
+effort=$(jqv '.effort.level')
 
 line2=""
 if [ -n "$ctx_pct" ]; then

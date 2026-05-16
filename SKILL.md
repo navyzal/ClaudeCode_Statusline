@@ -102,8 +102,8 @@ jq --arg home "$HOME" --arg act "$ACTIVITY" '
 - `jq '.statusLine' "$SETTINGS"` 출력 확인.
 - `jq '.hooks | keys' "$SETTINGS"` 에 5 종(UserPromptSubmit/PreToolUse/PostToolUse/Stop/SubagentStop)이 들어있는지.
 - `jq '.hooks.Stop[0].hooks | length' "$SETTINGS"` ≥ 2 (claude-activity.sh + context-threshold-check.sh).
-- `bash ~/.claude/statusline-command.sh <<< '{"session_id":"t","context_window":{"used_percentage":12},"model":{"display_name":"x"},"output_style":{"name":"high"}}'`
-  가 3~8줄 출력하는지 + `/tmp/claude-ctx-pct.$(id -u).t` 에 `12` cache 됐는지.
+- `bash ~/.claude/statusline-command.sh <<< '{"session_id":"t","context_window":{"used_percentage":12},"model":{"display_name":"x"},"effort":{"level":"high"}}'`
+  가 3~8줄 출력하는지 + line 3 의 effort 컬럼에 `high` 가 보이는지 + `/tmp/claude-ctx-pct.$(id -u).t` 에 `12` cache 됐는지.
 - 임계값 테스트: `echo "85" > /tmp/claude-ctx-pct.$(id -u).t-thr && echo '{"session_id":"t-thr"}' | bash ~/.claude/scripts/context-threshold-check.sh` 가 `hookSpecificOutput.additionalContext` JSON 출력하는지 (80% 이상). `echo "50" > ...` 시 빈 출력 (이하).
 
 완료 후 사용자에게 "Claude Code 를 재시작하면 새 statusline + 자동 핸드오프 임계 (80%) 가 적용됩니다." 안내. 임계값 변경 시 `export CLAUDE_CONTEXT_HANDOFF_THRESHOLD=85` 안내.

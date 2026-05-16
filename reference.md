@@ -9,7 +9,7 @@
 | 0 | `● Working · <tool>? · <elapsed>` / `✓ Done · Ns ago` / `○ Idle` | 주황·녹색·회색 | `/tmp/claude-activity.<uid>.<session>.json` (훅이 씀) |
 | 1 | `<user> | <branch> [(wt: name)]` | 파랑·시안 | `whoami`, `git rev-parse --abbrev-ref HEAD` |
 | 2 | `<dir>` | 노랑 | stdin `.workspace.current_dir` 또는 `.cwd` |
-| 3 | `[Context Window] <bar> <pct>% | <model> | <effort>` | 임계값 색 + 시안/마젠타 | stdin `.context_window`, `.model`, `.output_style` |
+| 3 | `[Context Window] <bar> <pct>% | <model> | <effort>` | 임계값 색 + 시안/마젠타 | stdin `.context_window`, `.model`, `.effort` |
 | 4 | `*Claude Code ~5h <bar> <pct>% | <remaining> | (<reset>)` | Claude 오렌지 | stdin `.rate_limits.five_hour` |
 | 5 | `*Claude Code ~7d <bar> <pct>% | <remaining> | (<reset>)` | Claude 오렌지 | stdin `.rate_limits.seven_day` |
 | 6 | `Codex Review ~5h …` *또는* `Codex {OpenAI|Azure} 💰 $cost (today)` | Codex 블루 | `~/.claude/scripts/codex-usage.sh` |
