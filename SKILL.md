@@ -99,8 +99,8 @@ jq --arg home "$HOME" --arg act "$ACTIVITY" '
 #### 설치 검증
 - `jq '.statusLine' "$SETTINGS"` 출력 확인.
 - `jq '.hooks | keys' "$SETTINGS"` 에 5 종(UserPromptSubmit/PreToolUse/PostToolUse/Stop/SubagentStop)이 들어있는지.
-- `bash ~/.claude/statusline-command.sh <<< '{"session_id":"t","context_window":{"used_percentage":12},"model":{"display_name":"x"},"output_style":{"name":"high"}}'`
-  가 3~8줄 출력하는지.
+- `bash ~/.claude/statusline-command.sh <<< '{"session_id":"t","context_window":{"used_percentage":12},"model":{"display_name":"x"},"effort":{"level":"high"}}'`
+  가 3~8줄 출력하는지 + context 줄의 effort 컬럼에 `high` 가 보이는지.
 
 완료 후 사용자에게 "Claude Code 를 재시작하면 새 statusline 이 적용됩니다." 안내.
 
