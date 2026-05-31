@@ -1,8 +1,9 @@
 #!/bin/bash
-# Claude Code statusline: up to 8 lines
+# Claude Code statusline: up to 9 lines
 #   ● Working · <tool>? · <elapsed>     (or ✓ Done · Ns ago / ○ Idle)
 #   {user} | {git_branch or "Git not init"} [wt: name]
 #   {dir}
+#   Claude: {claude login email} | Codex: {codex login email}
 #   [Context Window] {bar} {pct}% | {model} | {effort}
 #   *Claude Code ~5h {bar} {pct}% | {remaining} | ({reset})
 #   *Claude Code ~7d {bar} {pct}% | {remaining} | ({reset})
@@ -75,6 +76,30 @@ fi
 line1="${C_BLUE}${user}${C_RESET}${SEP}${C_CYAN}${branch}${C_RESET}${wt_tag}"
 # Line 2: dir
 line_dir="${C_YELLOW}${dir}${C_RESET}"
+
+# ---- Account line: "Claude: <email> | Codex: <email>" ----
+# Identifies which login each provider is using. Computed independently of the
+# usage helpers so it shows whenever logged in, even when Codex usage data is
+# unavailable. Claude email comes from ~/.claude.json (.oauthAccount); Codex
+# email is the `email` claim inside the id_token JWT in ~/.codex/auth.json
+# (base64url-decode the payload — the middle dot-segment).
+claude_acct=$(jq -r '.oauthAccount.emailAddress // empty' "$HOME/.claude.json" 2>/dev/null)
+
+codex_acct=""
+_cxauth="$HOME/.codex/auth.json"
+if [ -r "$_cxauth" ]; then
+  _tok=$(jq -r '.tokens.id_token // empty' "$_cxauth" 2>/dev/null)
+  if [ -n "$_tok" ]; then
+    _pl=${_tok#*.}; _pl=${_pl%%.*}            # JWT payload segment
+    case $(( ${#_pl} % 4 )) in 2) _pl="${_pl}==";; 3) _pl="${_pl}=";; esac
+    codex_acct=$(printf '%s' "$_pl" | tr '_-' '/+' | base64 -d 2>/dev/null | jq -r '.email // empty' 2>/dev/null)
+  fi
+fi
+
+line_acct=""
+if [ -n "$claude_acct" ] || [ -n "$codex_acct" ]; then
+  line_acct="${C_CLAUDE}Claude:${C_RESET} ${C_WHITE}${claude_acct:--}${C_RESET}${SEP}${C_CODEX}Codex:${C_RESET} ${C_WHITE}${codex_acct:--}${C_RESET}"
+fi
 
 # ---- Bar builder (10 cells, █/░) ----
 # Usage: make_bar <pct> [fixed_color]
@@ -164,6 +189,13 @@ fmt_elapsed() {
   fi
 }
 
+epoch_fmt() {
+  # Format a Unix epoch with strftime, portable across BSD (macOS) and GNU
+  # (Linux) date. BSD uses `date -r <epoch>`; GNU uses `date -d @<epoch>`.
+  #   epoch_fmt <epoch> <strftime-fmt-without-leading-+>
+  date -r "$1" "+$2" 2>/dev/null || date -d "@$1" "+$2" 2>/dev/null
+}
+
 fmt_reset_time() {
   # resets_at is a Unix epoch number (integer), not ISO string
   local ts=$1
@@ -174,9 +206,9 @@ fmt_reset_time() {
     return
   fi
   local mon day hm
-  mon=$(date -r "$ts" "+%-m" 2>/dev/null)
-  day=$(date -r "$ts" "+%-d" 2>/dev/null)
-  hm=$(date -r "$ts" "+%H:%M" 2>/dev/null)
+  mon=$(epoch_fmt "$ts" "%-m")
+  day=$(epoch_fmt "$ts" "%-d")
+  hm=$(epoch_fmt "$ts" "%H:%M")
   printf '%s/%s %s' "$mon" "$day" "$hm"
 }
 
@@ -469,7 +501,7 @@ if [ -r "$activity_file" ]; then
     done)
       if [ -n "$a_ended" ] && [ "$(( now_s - a_ended ))" -lt "$DONE_TTL" ]; then
         ago=$(fmt_elapsed $(( now_s - a_ended )))
-        abs=$(date -r "$a_ended" "+%H:%M:%S" 2>/dev/null)
+        abs=$(epoch_fmt "$a_ended" "%H:%M:%S")
         line_activity="${C_GREEN}✓${C_RESET} ${C_WHITE}Done${C_RESET}${SEP}${C_GRAY}${ago} ago${C_RESET}"
         [ -n "$abs" ] && line_activity+="${SEP}${C_GRAY}${abs}${C_RESET}"
       else
@@ -488,8 +520,9 @@ fi
 lines=()
 [ -n "$line_activity" ] && lines+=("$line_activity")  # ← activity banner
 [ -n "$line1" ]    && lines+=("$line1")     # user | branch [wt]
-[ -n "$line_dir" ] && lines+=("$line_dir")  # dir
-[ -n "$line2" ]    && lines+=("$line2")     # ctx | model | effort
+[ -n "$line_dir" ]  && lines+=("$line_dir")   # dir
+[ -n "$line_acct" ] && lines+=("$line_acct")  # Claude/Codex accounts
+[ -n "$line2" ]     && lines+=("$line2")      # ctx | model | effort
 [ -n "$line3" ]    && lines+=("$line3")     # CC ~5h
 [ -n "$line4" ]    && lines+=("$line4")     # CC ~7d
 [ -n "$line5" ]    && lines+=("$line5")     # CX ~5h

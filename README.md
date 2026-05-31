@@ -5,13 +5,14 @@
 
 ## 어떤 모양으로 나오는지
 
-정상 동작 시 최대 8 줄까지 출력된다 (실제 출력은 ANSI 컬러 처리 — 아래는
+정상 동작 시 최대 9 줄까지 출력된다 (실제 출력은 ANSI 컬러 처리 — 아래는
 컬러를 지운 샘플).
 
 ```
 ● Working · Bash · 0:12
 navyzal | main (wt: feature-x)
 ~/Workspace/my-project
+Claude: me@example.com | Codex: me@example.com
 [Context Window] ████░░░░░░  42% | Opus 4.7 | high
 *Claude Code ~5h ███░░░░░░░  32% | 3:41 | (4/24 23:00)
 *Claude Code ~7d ██░░░░░░░░  21% | 5:14:22 | (4/30 18:00)

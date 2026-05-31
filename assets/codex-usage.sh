@@ -50,14 +50,20 @@ emit_unavailable() { printf '{"available":false}'; }
 # Serve fresh cache.
 if [ -f "$CACHE" ]; then
   now=$(date +%s)
-  mtime=$(stat -f %m "$CACHE" 2>/dev/null || stat -c %Y "$CACHE" 2>/dev/null || echo 0)
+  # GNU stat (-c %Y) first, then BSD/macOS (-f %m). NOTE: order matters — GNU
+  # `stat -f` does NOT fail on Linux, it prints filesystem info, which would
+  # poison the arithmetic below (and abort under `set -u`). Guard non-numeric.
+  mtime=$(stat -c %Y "$CACHE" 2>/dev/null || stat -f %m "$CACHE" 2>/dev/null || echo 0)
+  case "$mtime" in ''|*[!0-9]*) mtime=0 ;; esac
   if [ "$(( now - mtime ))" -lt "$TTL" ]; then
     cat "$CACHE"
     exit 0
   fi
 fi
 
-if ! command -v sqlite3 >/dev/null 2>&1 || ! command -v jq >/dev/null 2>&1; then
+# Require jq + python3 (NOT the sqlite3 CLI). python3 reads logs_2.sqlite via its
+# built-in sqlite3 module, so this works on machines without the sqlite3 binary.
+if ! command -v jq >/dev/null 2>&1 || ! command -v python3 >/dev/null 2>&1; then
   out=$(emit_unavailable)
   printf '%s' "$out" > "$CACHE" 2>/dev/null
   printf '%s' "$out"
@@ -415,102 +421,96 @@ PY
   fi
 fi
 
-extract_json() {
-  printf '%s' "$1" | awk '
-    BEGIN { depth=0; in_str=0; esc=0 }
-    {
-      for (i=1; i<=length($0); i++) {
-        c=substr($0,i,1); printf "%s", c
-        if (esc) { esc=0; continue }
-        if (c=="\\") { esc=1; continue }
-        if (c=="\"") { in_str = !in_str; continue }
-        if (in_str) continue
-        if (c=="{") depth++
-        else if (c=="}") { depth--; if (depth==0) { print ""; exit } }
-      }
-    }'
-}
-
+# Fallback: scan logs_2.sqlite for the most recent codex.rate_limits event.
+# Read via python3's built-in sqlite3 module (no sqlite3 CLI dependency) and
+# emit the same JSON shape the RPC path produces. Field mapping from the log
+# row: used_percent→used_percentage, reset_at→resets_at, buckets keyed by
+# window_minutes (300→5h, 10080→7d), with positional fallback.
 if [ -r "$LOGS_DB" ]; then
-  row_rl=$(sqlite3 -separator $'\t' "$LOGS_DB" \
-    "SELECT ts, substr(feedback_log_body,
-                       instr(feedback_log_body, '{\"type\":\"codex.rate_limits'),
-                       1200)
-       FROM logs
-      WHERE instr(feedback_log_body, '{\"type\":\"codex.rate_limits') > 0
-      ORDER BY ts DESC LIMIT 1;" 2>/dev/null)
+  sub_out=$(PROVIDER="$provider" NOW_EPOCH="$now_epoch" LOGS_DB="$LOGS_DB" python3 - <<'PY'
+import json, os, sqlite3, sys
 
-  if [ -n "$row_rl" ]; then
-    ts_rl=${row_rl%%$'\t'*}
-    body_rl=${row_rl#*$'\t'}
-    trimmed_rl=$(extract_json "$body_rl")
+provider = os.environ["PROVIDER"]
+db_path  = os.environ["LOGS_DB"]
+MARKER   = '{"type":"codex.rate_limits'
 
-    parsed=$(printf '%s' "$trimmed_rl" | jq -c \
-      --arg provider "$provider" \
-      --argjson ts "$ts_rl" '
-      . as $r
-      | ($r.rate_limits // {}) as $rl
-      | [($rl.primary // empty), ($rl.secondary // empty)]
-      | map(select(. != null)) as $buckets
-      | (($r.additional_rate_limits // {})["GPT-5.3-Codex-Spark"] // {}) as $sp
-      | [($sp.primary // empty), ($sp.secondary // empty)]
-      | map(select(. != null)) as $sp_buckets
-      | {
-          available: (($buckets | length) > 0),
-          mode: "subscription",
-          provider: $provider,
-          sampled_at: $ts,
-          five_hour: (
-            ($buckets | map(select(.window_minutes == 300)) | .[0]) //
-            ($buckets[0] // null)
-          ),
-          seven_day: (
-            ($buckets | map(select(.window_minutes == 10080)) | .[0]) //
-            ($buckets[1] // null)
-          ),
-          spark_five_hour: (
-            ($sp_buckets | map(select(.window_minutes == 300)) | .[0]) //
-            ($sp_buckets[0] // null)
-          ),
-          spark_seven_day: (
-            ($sp_buckets | map(select(.window_minutes == 10080)) | .[0]) //
-            ($sp_buckets[1] // null)
-          )
-        }
-      | {
-          available: .available, mode: .mode, provider: .provider, sampled_at: .sampled_at,
-          five_hour: (
-            if .five_hour == null then null
-            else {used_percentage: (.five_hour.used_percent // 0),
-                  resets_at:       (.five_hour.reset_at // 0)}
-            end
-          ),
-          seven_day: (
-            if .seven_day == null then null
-            else {used_percentage: (.seven_day.used_percent // 0),
-                  resets_at:       (.seven_day.reset_at // 0)}
-            end
-          ),
-          spark_five_hour: (
-            if .spark_five_hour == null then null
-            else {used_percentage: (.spark_five_hour.used_percent // 0),
-                  resets_at:       (.spark_five_hour.reset_at // 0)}
-            end
-          ),
-          spark_seven_day: (
-            if .spark_seven_day == null then null
-            else {used_percentage: (.spark_seven_day.used_percent // 0),
-                  resets_at:       (.spark_seven_day.reset_at // 0)}
-            end
-          )
-        }
-    ' 2>/dev/null)
+try:
+    conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
+    row = conn.execute(
+        "SELECT ts, feedback_log_body FROM logs "
+        "WHERE instr(feedback_log_body, ?) > 0 "
+        "ORDER BY ts DESC LIMIT 1",
+        (MARKER,),
+    ).fetchone()
+except Exception:
+    sys.exit(1)
 
-    if [ -n "$parsed" ] && [ "$parsed" != "null" ]; then
-      printf '%s' "$parsed" > "$CACHE" 2>/dev/null
-      printf '%s' "$parsed"
-      exit 0
-    fi
+if not row:
+    sys.exit(1)
+ts, body = row
+idx = body.find(MARKER)
+if idx < 0:
+    sys.exit(1)
+
+# Brace-match the JSON object starting at the marker (log lines can carry a
+# trailing tail after the object).
+depth = 0; in_str = False; esc = False; obj = None
+for i in range(idx, len(body)):
+    c = body[i]
+    if esc:        esc = False; continue
+    if c == '\\':  esc = True;  continue
+    if c == '"':   in_str = not in_str; continue
+    if in_str:     continue
+    if c == '{':   depth += 1
+    elif c == '}':
+        depth -= 1
+        if depth == 0:
+            try:
+                obj = json.loads(body[idx:i+1])
+            except Exception:
+                obj = None
+            break
+if not obj:
+    sys.exit(1)
+
+def pick(buckets, minutes, pos):
+    for b in buckets:
+        if b and b.get("window_minutes") == minutes:
+            return b
+    return buckets[pos] if len(buckets) > pos else None
+
+def win(b):
+    if not b:
+        return None
+    return {"used_percentage": int(b.get("used_percent") or 0),
+            "resets_at":       int(b.get("reset_at") or 0)}
+
+rl   = obj.get("rate_limits") or {}
+main = [b for b in (rl.get("primary"), rl.get("secondary")) if b]
+sp   = (obj.get("additional_rate_limits") or {}).get("GPT-5.3-Codex-Spark") or {}
+spb  = [b for b in (sp.get("primary"), sp.get("secondary")) if b]
+
+if not main:
+    sys.exit(1)
+
+out = {
+    "available":       True,
+    "mode":            "subscription",
+    "provider":        provider,
+    "sampled_at":      int(ts),
+    "source":          "log",
+    "five_hour":       win(pick(main, 300, 0)),
+    "seven_day":       win(pick(main, 10080, 1)),
+    "spark_five_hour": win(pick(spb, 300, 0)),
+    "spark_seven_day": win(pick(spb, 10080, 1)),
+}
+sys.stdout.write(json.dumps(out, separators=(",", ":")))
+PY
+)
+  if [ -n "$sub_out" ]; then
+    printf '%s' "$sub_out" > "$CACHE" 2>/dev/null
+    printf '%s' "$sub_out"
+    exit 0
   fi
 fi
 
