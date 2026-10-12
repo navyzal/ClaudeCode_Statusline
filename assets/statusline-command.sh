@@ -80,10 +80,11 @@ line_dir="${C_YELLOW}${dir}${C_RESET}"
 # ---- Account line: "Claude: <email> | Codex: <email>" ----
 # Identifies which login each provider is using. Computed independently of the
 # usage helpers so it shows whenever logged in, even when Codex usage data is
-# unavailable. Claude email comes from ~/.claude.json (.oauthAccount); Codex
-# email is the `email` claim inside the id_token JWT in ~/.codex/auth.json
-# (base64url-decode the payload — the middle dot-segment).
-claude_acct=$(jq -r '.oauthAccount.emailAddress // empty' "$HOME/.claude.json" 2>/dev/null)
+# unavailable. Claude email comes from $CLAUDE_CONFIG_DIR/.claude.json (default
+# ~/.claude.json, .oauthAccount); Codex email is the `email` claim inside the
+# id_token JWT in ~/.codex/auth.json (base64url-decode the payload — the middle
+# dot-segment).
+claude_acct=$(jq -r '.oauthAccount.emailAddress // empty' "${CLAUDE_CONFIG_DIR:-$HOME}/.claude.json" 2>/dev/null)
 
 codex_acct=""
 _cxauth="$HOME/.codex/auth.json"
@@ -281,7 +282,7 @@ line7=""
 line8=""
 _self_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd)"
 cx_helper="${_self_dir}/scripts/codex-usage.sh"
-[ -x "$cx_helper" ] || cx_helper="${HOME}/.claude/scripts/codex-usage.sh"
+[ -x "$cx_helper" ] || cx_helper="${CLAUDE_CONFIG_DIR:-${HOME}/.claude}/scripts/codex-usage.sh"
 
 fmt_sample_age() {
   # Human-readable age of sample (Xm / Xh / Xd), grey.

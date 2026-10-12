@@ -14,6 +14,11 @@ Claude Code 의 `statusLine` + 활동 배너 훅 세트를 다른 PC 로 이식�
 - `~/.claude/scripts/codex-usage.sh` — Codex 사용량 SQLite 헬퍼
 - `~/.claude/settings.json` 의 `statusLine` 블록 + 5 개 훅 (UserPromptSubmit / PreToolUse / PostToolUse / Stop / SubagentStop)
 
+**설정 디렉토리**: 위 `~/.claude` 는 기본값이다. `CLAUDE_CONFIG_DIR` 가 설정돼 있으면
+(예: `~/.claude-extra`) 그 디렉토리가 대상이다. 아래 명령은 전부
+`CFG="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"` 기준으로 쓴다. 설치 전에
+`echo "${CLAUDE_CONFIG_DIR:-$HOME/.claude}"` 로 대상 디렉토리를 사용자에게 확인시킬 것.
+
 세부 동작·각 줄 의미는 `reference.md` 참조.
 
 ## 호출 분기
@@ -25,16 +30,17 @@ Claude Code 의 `statusLine` + 활동 배너 훅 세트를 다른 PC 로 이식�
 
 #### 사전 조건 체크
 - `jq` 설치 여부: `command -v jq`. 없으면 중단 + 안내 (`brew install jq` / `apt install jq`).
-- `~/.claude/` 디렉토리 존재 여부 확인. 없으면 `mkdir -p`.
+- `$CFG` 디렉토리 존재 여부 확인. 없으면 `mkdir -p`.
 
 #### 절차
-이 스킬 디렉토리(`~/.claude/skills/Vic_Statusline/`) 의 `assets/` 3 개를 대상 경로로
+이 스킬 디렉토리(`$CFG/skills/Vic_Statusline/`) 의 `assets/` 3 개를 대상 경로로
 복사한다. 기존 파일은 전부 `.bak.<YYYYMMDD-HHMMSS>` 로 백업 후 덮어쓴다.
 
 ```bash
-SKILL_DIR="$HOME/.claude/skills/Vic_Statusline"
+CFG="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
+SKILL_DIR="$CFG/skills/Vic_Statusline"
 TS=$(date +%Y%m%d-%H%M%S)
-mkdir -p "$HOME/.claude/scripts"
+mkdir -p "$CFG/scripts"
 
 backup_if_exists() {
   local f=$1
@@ -43,9 +49,9 @@ backup_if_exists() {
 
 # 1) 쉘 스크립트 3 개
 for pair in \
-  "$SKILL_DIR/assets/statusline-command.sh:$HOME/.claude/statusline-command.sh" \
-  "$SKILL_DIR/assets/claude-activity.sh:$HOME/.claude/scripts/claude-activity.sh" \
-  "$SKILL_DIR/assets/codex-usage.sh:$HOME/.claude/scripts/codex-usage.sh"
+  "$SKILL_DIR/assets/statusline-command.sh:$CFG/statusline-command.sh" \
+  "$SKILL_DIR/assets/claude-activity.sh:$CFG/scripts/claude-activity.sh" \
+  "$SKILL_DIR/assets/codex-usage.sh:$CFG/scripts/codex-usage.sh"
 do
   src=${pair%%:*}
   dst=${pair##*:}
@@ -57,21 +63,21 @@ done
 
 #### settings.json 머지
 
-`~/.claude/settings.json` 이 없으면 `{}` 로 신규 생성. 있으면 `.bak.<ts>` 로 백업 후
+`$CFG/settings.json` 이 없으면 `{}` 로 신규 생성. 있으면 `.bak.<ts>` 로 백업 후
 `jq` 로 머지:
 
 ```bash
-SETTINGS="$HOME/.claude/settings.json"
+SETTINGS="$CFG/settings.json"
 [ -f "$SETTINGS" ] && cp -p "$SETTINGS" "${SETTINGS}.bak.${TS}" || echo '{}' > "$SETTINGS"
 
-# $HOME 을 실제 경로로 박아서 hook command 를 만든다 (플랫폼간 $HOME 전개 차이 회피).
-ACTIVITY="$HOME/.claude/scripts/claude-activity.sh"
+# $CFG 를 실제 경로로 박아서 hook command 를 만든다 (플랫폼간 $HOME 전개 차이 회피).
+ACTIVITY="$CFG/scripts/claude-activity.sh"
 
-jq --arg home "$HOME" --arg act "$ACTIVITY" '
+jq --arg cfg "$CFG" --arg act "$ACTIVITY" '
   # --- statusLine: 내 값으로 덮어쓰기 ---
   .statusLine = {
     "type": "command",
-    "command": ("bash " + $home + "/.claude/statusline-command.sh")
+    "command": ("bash " + $cfg + "/statusline-command.sh")
   }
   # --- hooks: 5 종에 claude-activity.sh 훅을 append (중복 방지) ---
   | .hooks //= {}
@@ -99,8 +105,9 @@ jq --arg home "$HOME" --arg act "$ACTIVITY" '
 #### 설치 검증
 - `jq '.statusLine' "$SETTINGS"` 출력 확인.
 - `jq '.hooks | keys' "$SETTINGS"` 에 5 종(UserPromptSubmit/PreToolUse/PostToolUse/Stop/SubagentStop)이 들어있는지.
-- `bash ~/.claude/statusline-command.sh <<< '{"session_id":"t","context_window":{"used_percentage":12},"model":{"display_name":"x"},"effort":{"level":"high"}}'`
-  가 3~8줄 출력하는지 + context 줄의 effort 컬럼에 `high` 가 보이는지.
+- `bash "$CFG/statusline-command.sh" <<< '{"session_id":"t","context_window":{"used_percentage":12},"model":{"display_name":"x"},"effort":{"level":"high"}}'`
+  가 3~8줄 출력하는지 + context 줄의 effort 컬럼에 `high` 가 보이는지 + 계정 줄의
+  Claude 이메일이 `$CFG/.claude.json` 의 계정과 같은지.
 
 완료 후 사용자에게 "Claude Code 를 재시작하면 새 statusline 이 적용됩니다." 안내.
 
@@ -108,14 +115,15 @@ jq --arg home "$HOME" --arg act "$ACTIVITY" '
 
 트리거: "Vic_Statusline 동기화", "statusline 스킬 최신화", "sync Vic_Statusline".
 
-현재 PC 가 *원본 PC* (= `~/.claude/statusline-command.sh` 가 최신) 라고 가정하고, 그
+현재 PC 가 *원본 PC* (= `$CFG/statusline-command.sh` 가 최신) 라고 가정하고, 그
 내용을 스킬의 `assets/` 로 복사해서 스냅샷을 갱신한다.
 
 ```bash
-SKILL_DIR="$HOME/.claude/skills/Vic_Statusline"
-cp "$HOME/.claude/statusline-command.sh"             "$SKILL_DIR/assets/statusline-command.sh"
-cp "$HOME/.claude/scripts/claude-activity.sh"        "$SKILL_DIR/assets/claude-activity.sh"
-cp "$HOME/.claude/scripts/codex-usage.sh"            "$SKILL_DIR/assets/codex-usage.sh"
+CFG="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
+SKILL_DIR="$CFG/skills/Vic_Statusline"
+cp "$CFG/statusline-command.sh"             "$SKILL_DIR/assets/statusline-command.sh"
+cp "$CFG/scripts/claude-activity.sh"        "$SKILL_DIR/assets/claude-activity.sh"
+cp "$CFG/scripts/codex-usage.sh"            "$SKILL_DIR/assets/codex-usage.sh"
 chmod +x "$SKILL_DIR/assets/"*.sh
 date -u +"%Y-%m-%dT%H:%M:%SZ" > "$SKILL_DIR/assets/.synced_at"
 ```
