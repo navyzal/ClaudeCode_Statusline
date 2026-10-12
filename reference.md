@@ -9,11 +9,11 @@
 | 0 | `● Working · <tool>? · <elapsed>` / `✓ Done · Ns ago` / `○ Idle` | 주황·녹색·회색 | `/tmp/claude-activity.<uid>.<session>.json` (훅이 씀) |
 | 1 | `<user> \| <branch> [(wt: name)]` | 파랑·시안 | `whoami`, `git rev-parse --abbrev-ref HEAD` |
 | 2 | `<dir>` | 노랑 | stdin `.workspace.current_dir` 또는 `.cwd` |
-| 3 | `Claude: <email> \| Codex: <email>` | Claude 오렌지 / Codex 블루 | `~/.claude.json` `.oauthAccount.emailAddress`, `~/.codex/auth.json` `.tokens.id_token`(JWT) 의 `email` 클레임 |
+| 3 | `Claude: <email> \| Codex: <email>` | Claude 오렌지 / Codex 블루 | `$CLAUDE_CONFIG_DIR/.claude.json` (기본 `~/.claude.json`) `.oauthAccount.emailAddress`, `~/.codex/auth.json` `.tokens.id_token`(JWT) 의 `email` 클레임 |
 | 4 | `[Context Window] <bar> <pct>% \| <model> \| <effort>` | 임계값 색 + 시안/마젠타 | stdin `.context_window`, `.model`, `.effort` |
 | 5 | `*Claude Code ~5h <bar> <pct>% \| <remaining> \| (<reset>)` | Claude 오렌지 | stdin `.rate_limits.five_hour` |
 | 6 | `*Claude Code ~7d <bar> <pct>% \| <remaining> \| (<reset>)` | Claude 오렌지 | stdin `.rate_limits.seven_day` |
-| 7 | `Codex Review ~5h …` *또는* `Codex {OpenAI\|Azure} 💰 $cost (today)` | Codex 블루 | `~/.claude/scripts/codex-usage.sh` |
+| 7 | `Codex Review ~5h …` *또는* `Codex {OpenAI\|Azure} 💰 $cost (today)` | Codex 블루 | `$CLAUDE_CONFIG_DIR/scripts/codex-usage.sh` (기본 `~/.claude`) |
 | 8 | `Codex Review ~7d …` (구독 모드 한정) | Codex 블루 | 동일 |
 
 계정 줄(순서 3)은 로그인되어 있으면 항상 표시되며, 한쪽이 로그아웃 상태면 그 자리에 `-` 가
